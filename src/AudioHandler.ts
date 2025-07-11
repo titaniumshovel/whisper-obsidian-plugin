@@ -59,60 +59,64 @@ export class AudioHandler {
 			new Notice("Error saving audio file: " + err.message);
 		}
 
-		try {
-			if (this.plugin.settings.debugMode) {
-				new Notice("Parsing audio data:" + fileName);
-			}
-			const response = await axios.post(
-				this.plugin.settings.apiUrl,
-				formData,
-				{
-					headers: {
-						"Content-Type": "multipart/form-data",
-						Authorization: `Bearer ${this.plugin.settings.apiKey}`,
-					},
+		// Only transcribe if we need to save transcription or insert it somewhere
+		const shouldTranscribe = this.plugin.settings.createNewFileAfterRecording || 
+			this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
+
+		if (shouldTranscribe) {
+			try {
+				if (this.plugin.settings.debugMode) {
+					new Notice("Parsing audio data:" + fileName);
 				}
-			);
-
-			// Determine if a new file should be created
-			const activeView =
-				this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
-			const shouldCreateNewFile =
-				this.plugin.settings.createNewFileAfterRecording || !activeView;
-
-			if (shouldCreateNewFile) {
-				await this.plugin.app.vault.create(
-					noteFilePath,
-					`![[${audioFilePath}]]\n${response.data.text}`
+				const response = await axios.post(
+					this.plugin.settings.apiUrl,
+					formData,
+					{
+						headers: {
+							"Content-Type": "multipart/form-data",
+							Authorization: `Bearer ${this.plugin.settings.apiKey}`,
+						},
+					}
 				);
-				await this.plugin.app.workspace.openLinkText(
-					noteFilePath,
-					"",
-					true
-				);
-			} else {
-				// Insert the transcription at the cursor position
-				const editor =
-					this.plugin.app.workspace.getActiveViewOfType(
-						MarkdownView
-					)?.editor;
-				if (editor) {
-					const cursorPosition = editor.getCursor();
-					editor.replaceRange(response.data.text, cursorPosition);
 
-					// Move the cursor to the end of the inserted text
-					const newPosition = {
-						line: cursorPosition.line,
-						ch: cursorPosition.ch + response.data.text.length,
-					};
-					editor.setCursor(newPosition);
+				// Only create/insert transcription if the setting is enabled
+				if (this.plugin.settings.createNewFileAfterRecording) {
+					// Create a new transcription file
+					await this.plugin.app.vault.create(
+						noteFilePath,
+						`![[${audioFilePath}]]\n${response.data.text}`
+					);
+					await this.plugin.app.workspace.openLinkText(
+						noteFilePath,
+						"",
+						true
+					);
+				} else {
+					// Insert the transcription at the cursor position only if there's an active view
+					const activeView =
+						this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
+					if (activeView) {
+						const editor = activeView.editor;
+						if (editor) {
+							const cursorPosition = editor.getCursor();
+							editor.replaceRange(response.data.text, cursorPosition);
+
+							// Move the cursor to the end of the inserted text
+							const newPosition = {
+								line: cursorPosition.line,
+								ch: cursorPosition.ch + response.data.text.length,
+							};
+							editor.setCursor(newPosition);
+						}
+					}
+					// If no active view and createNewFileAfterRecording is false, do nothing with transcription
 				}
-			}
 
-			new Notice("Audio parsed successfully.");
-		} catch (err) {
-			console.error("Error parsing audio:", err);
-			new Notice("Error parsing audio: " + err.message);
+				new Notice("Audio parsed successfully.");
+			} catch (err) {
+				console.error("Error parsing audio:", err);
+				new Notice("Error parsing audio: " + err.message);
+			}
 		}
 	}
 }
