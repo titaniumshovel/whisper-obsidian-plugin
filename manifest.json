@@ -1,6 +1,6 @@
 {
-  "id": "whisper-fixed",
-  "name": "Whisper-Fixed",
+  "id": "whisper",
+  "name": "Whisper",
   "version": "1.5.5",
   "minAppVersion": "0.15.0",
   "description": "Speech-to-text in Obsidian using OpenAI Whisper",
